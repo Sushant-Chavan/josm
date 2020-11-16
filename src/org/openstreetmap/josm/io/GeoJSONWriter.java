@@ -76,7 +76,7 @@ public class GeoJSONWriter {
      */
     public GeoJSONWriter(DataSet ds) {
         this.data = ds;
-        this.projection = Projections.getProjectionByCode("EPSG:4326"); // WGS 84
+        this.projection = Projections.getProjectionByCode("EPSG:3857"); // Merc
     }
 
     /**
