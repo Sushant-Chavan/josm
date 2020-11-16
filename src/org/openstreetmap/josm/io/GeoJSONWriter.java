@@ -255,12 +255,16 @@ public class GeoJSONWriter {
         final JsonObject geom = geomObj.build();
 
         // Build primitive JSON object
-        array.add(Json.createObjectBuilder()
-             .add("type", "Feature")
-             .add("id", Long.toString(p.getUniqueId()))
-             .add("properties", prop.isEmpty() ? JsonValue.NULL : prop)
-             .add("geometry", geom.isEmpty() ? JsonValue.NULL : geom)
-             .add("relation", rel.isEmpty() ? JsonValue.NULL : rel));
+        final JsonObjectBuilder primitiveObj = Json.createObjectBuilder();
+        primitiveObj.add("type", "Feature");
+        primitiveObj.add("id", Long.toString(p.getUniqueId()));
+        if (!prop.isEmpty())
+            primitiveObj.add("properties", prop);
+        if (!geom.isEmpty())
+            primitiveObj.add("geometry", geom);
+        if (!rel.isEmpty())
+            primitiveObj.add("relation", rel);
+        array.add(primitiveObj);
     }
 
     private static JsonValue convertValueToJson(String value) {
