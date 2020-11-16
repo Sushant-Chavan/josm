@@ -53,6 +53,7 @@ public class GeoJSONWriter {
 
     private final DataSet data;
     private final Projection projection;
+    private EastNorth origin;
     private static final BooleanProperty SKIP_EMPTY_NODES = new BooleanProperty("geojson.export.skip-empty-nodes", true);
     private static final BooleanProperty UNTAGGED_CLOSED_IS_POLYGON = new BooleanProperty("geojson.export.untagged-closed-is-polygon", false);
     private static final Set<Way> processedMultipolygonWays = new HashSet<>();
@@ -78,6 +79,7 @@ public class GeoJSONWriter {
     public GeoJSONWriter(DataSet ds) {
         this.data = ds;
         this.projection = Projections.getProjectionByCode("EPSG:3857"); // Merc
+        this.origin = EastNorth.ZERO;
     }
 
     /**
@@ -101,10 +103,26 @@ public class GeoJSONWriter {
             JsonObjectBuilder object = Json.createObjectBuilder()
                     .add("type", "FeatureCollection")
                     .add("generator", "JOSM");
+            findOrigin(data);
             appendLayerBounds(data, object);
             appendLayerFeatures(data, object);
             writer.writeObject(object.build());
             return stringWriter.toString();
+        }
+    }
+
+    private void findOrigin(DataSet ds) {
+        Collection<OsmPrimitive> primitives = ds.allNonDeletedPrimitives();
+        for (OsmPrimitive p : primitives) {
+            if (p instanceof Node){
+                for (Entry<String, String> t : p.getKeys().entrySet()) {
+                    if (t.getKey().equals("name") && t.getValue().equals("origin")){
+                        origin = projection.latlon2eastNorth(((Node)p).getCoor());
+                        Logging.info("Setting custom origin at: " + origin.east() + "," + origin.north());
+                        return;
+                    }
+                }
+            }
         }
     }
 
@@ -222,7 +240,7 @@ public class GeoJSONWriter {
     }
 
     private JsonArrayBuilder getCoorArray(JsonArrayBuilder builder, LatLon c) {
-        return getCoorArray(builder, projection.latlon2eastNorth(c));
+        return getCoorArray(builder, projection.latlon2eastNorth(c).subtract(origin));
     }
 
     private static JsonArrayBuilder getCoorArray(JsonArrayBuilder builder, EastNorth c) {
