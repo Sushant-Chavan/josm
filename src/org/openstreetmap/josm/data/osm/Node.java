@@ -14,6 +14,7 @@ import org.openstreetmap.josm.data.osm.visitor.OsmPrimitiveVisitor;
 import org.openstreetmap.josm.data.osm.visitor.PrimitiveVisitor;
 import org.openstreetmap.josm.data.projection.Projecting;
 import org.openstreetmap.josm.data.projection.ProjectionRegistry;
+import org.openstreetmap.josm.spi.preferences.Config;
 
 /**
  * One node data, consisting of one world coordinate waypoint.
@@ -43,26 +44,34 @@ public final class Node extends OsmPrimitive implements INode {
     @Override
     public void setCoor(LatLon coor) {
         updateCoor(coor, null);
-
-        // Add projected coordinates as tags for cartesian coordinates
-        double x = east;
-        double y = north;
-        if (Double.isNaN(x) || Double.isNaN(y)) {
-            EastNorth en = ProjectionRegistry.getProjection().latlon2eastNorth(coor);
-            x = en.east();
-            y = en.north();
-        }
-        put("x", String.format("%.3f", x));
-        put("y", String.format("%.3f", y));
     }
 
     @Override
     public void setEastNorth(EastNorth eastNorth) {
         updateCoor(null, eastNorth);
+    }
 
-        // Add projected coordinates as tags for cartesian coordinates
-        put("x", String.format("%.3f", eastNorth.east()));
-        put("y", String.format("%.3f", eastNorth.north()));
+    private void addProjectedCoorTags(LatLon coor, EastNorth eastNorth) {
+        if(Config.getPref().getBoolean("projection.save_projected", false)) {
+            if (coor != null) {
+                double x = east;
+                double y = north;
+                if (Double.isNaN(x) || Double.isNaN(y)) {
+                    EastNorth en = ProjectionRegistry.getProjection().latlon2eastNorth(coor);
+                    x = en.east();
+                    y = en.north();
+                }
+                put("x", String.format("%.3f", x));
+                put("y", String.format("%.3f", y));
+            } else if (eastNorth != null) {
+                put("x", String.format("%.3f", eastNorth.east()));
+                put("y", String.format("%.3f", eastNorth.north()));
+            }
+        }
+        else {
+            remove("x");
+            remove("y");
+        }
     }
 
     private void updateCoor(LatLon coor, EastNorth eastNorth) {
@@ -76,6 +85,7 @@ public final class Node extends OsmPrimitive implements INode {
         } else {
             setCoorInternal(coor, eastNorth);
         }
+        addProjectedCoorTags(coor, eastNorth);
     }
 
     /**

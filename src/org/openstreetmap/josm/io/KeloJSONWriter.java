@@ -70,7 +70,7 @@ public class KeloJSONWriter extends GeoJSONWriter{
         }
     }
 
-    private class RelationPrimitiveVisitor implements OsmPrimitiveVisitor {
+    private static class RelationPrimitiveVisitor implements OsmPrimitiveVisitor {
 
         private final JsonObjectBuilder relObj;
 

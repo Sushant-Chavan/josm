@@ -21,6 +21,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSeparator;
+import javax.swing.JCheckBox;
 
 import org.openstreetmap.josm.actions.ExpertToggleAction;
 import org.openstreetmap.josm.data.Bounds;
@@ -319,6 +320,9 @@ public class ProjectionPreference extends DefaultTabPreferenceSetting {
                     .sorted(Comparator.comparing(SystemOfMeasurement::toString))
                     .toArray(SystemOfMeasurement[]::new));
 
+    
+    private final JCheckBox saveProjected = new JCheckBox(tr("Save the projected coordinates as (x, y) tags for each Node."));
+
     /**
      * This variable holds the JPanel with the projection's preferences. If the
      * selected projection does not implement this, it will be set to an empty
@@ -368,6 +372,9 @@ public class ProjectionPreference extends DefaultTabPreferenceSetting {
 
         unitsCombo.setSelectedItem(SystemOfMeasurement.getSystemOfMeasurement());
 
+        saveProjected.setToolTipText(tr("The projected coordinates for every node will be added as two tags with keys 'x' and 'y' in the OSM file"));
+        saveProjected.setSelected(Config.getPref().getBoolean("projection.save_projected", false));
+
         projPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
         projPanel.add(new JLabel(tr("Projection method")), GBC.std().insets(5, 5, 0, 5));
         projPanel.add(GBC.glue(5, 0), GBC.std().fill(GBC.HORIZONTAL));
@@ -410,6 +417,8 @@ public class ProjectionPreference extends DefaultTabPreferenceSetting {
         projPanel.add(new JLabel(tr("System of measurement")), GBC.std().insets(5, 5, 0, 5));
         projPanel.add(GBC.glue(5, 0), GBC.std().fill(GBC.HORIZONTAL));
         projPanel.add(unitsCombo, GBC.eop().fill(GBC.HORIZONTAL).insets(0, 5, 5, 5));
+        projPanel.add(new JSeparator(), GBC.eol().fill(GBC.HORIZONTAL).insets(0, 5, 0, 10));
+        projPanel.add(saveProjected, GBC.eop().insets(0, 0, 0, 0));
         projPanel.add(GBC.glue(1, 1), GBC.std().fill(GBC.HORIZONTAL).weight(1.0, 1.0));
 
         gui.createPreferenceTab(this).add(projPanel.getVerticalScrollPane(), GBC.std().fill());
@@ -454,6 +463,7 @@ public class ProjectionPreference extends DefaultTabPreferenceSetting {
         }
 
         SystemOfMeasurement.setSystemOfMeasurement(((SystemOfMeasurement) unitsCombo.getSelectedItem()));
+        Config.getPref().putBoolean("projection.save_projected", saveProjected.isSelected());
 
         return false;
     }
