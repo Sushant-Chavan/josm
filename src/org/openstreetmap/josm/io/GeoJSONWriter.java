@@ -34,7 +34,6 @@ import org.openstreetmap.josm.data.osm.MultipolygonBuilder.JoinedPolygon;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Relation;
-import org.openstreetmap.josm.data.osm.RelationMember;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.visitor.OsmPrimitiveVisitor;
 import org.openstreetmap.josm.data.preferences.BooleanProperty;
@@ -51,10 +50,9 @@ import org.openstreetmap.josm.tools.Pair;
  */
 public class GeoJSONWriter {
 
-    private final DataSet data;
-    private final Projection projection;
-    private EastNorth origin;
-    private static final BooleanProperty SKIP_EMPTY_NODES = new BooleanProperty("geojson.export.skip-empty-nodes", true);
+    protected final DataSet data;
+    protected Projection projection;
+    protected static final BooleanProperty SKIP_EMPTY_NODES = new BooleanProperty("geojson.export.skip-empty-nodes", true);
     private static final BooleanProperty UNTAGGED_CLOSED_IS_POLYGON = new BooleanProperty("geojson.export.untagged-closed-is-polygon", false);
     private static final Set<Way> processedMultipolygonWays = new HashSet<>();
 
@@ -78,8 +76,7 @@ public class GeoJSONWriter {
      */
     public GeoJSONWriter(DataSet ds) {
         this.data = ds;
-        this.projection = Projections.getProjectionByCode("EPSG:3857"); // Merc
-        this.origin = EastNorth.ZERO;
+        this.projection = Projections.getProjectionByCode("EPSG:4326"); // WGS 84
     }
 
     /**
@@ -103,7 +100,6 @@ public class GeoJSONWriter {
             JsonObjectBuilder object = Json.createObjectBuilder()
                     .add("type", "FeatureCollection")
                     .add("generator", "JOSM");
-            findOrigin(data);
             appendLayerBounds(data, object);
             appendLayerFeatures(data, object);
             writer.writeObject(object.build());
@@ -111,22 +107,7 @@ public class GeoJSONWriter {
         }
     }
 
-    private void findOrigin(DataSet ds) {
-        Collection<OsmPrimitive> primitives = ds.allNonDeletedPrimitives();
-        for (OsmPrimitive p : primitives) {
-            if (p instanceof Node){
-                for (Entry<String, String> t : p.getKeys().entrySet()) {
-                    if (t.getKey().equals("name") && t.getValue().equals("origin")){
-                        origin = projection.latlon2eastNorth(((Node)p).getCoor());
-                        Logging.info("Setting custom origin at: " + origin.east() + "," + origin.north());
-                        return;
-                    }
-                }
-            }
-        }
-    }
-
-    private class GeometryPrimitiveVisitor implements OsmPrimitiveVisitor {
+    protected class GeometryPrimitiveVisitor implements OsmPrimitiveVisitor {
 
         private final JsonObjectBuilder geomObj;
 
@@ -198,52 +179,11 @@ public class GeoJSONWriter {
         }
     }
 
-    private class RelationPrimitiveVisitor implements OsmPrimitiveVisitor {
-
-        private final JsonObjectBuilder relObj;
-
-        RelationPrimitiveVisitor(JsonObjectBuilder relObj) {
-            this.relObj = relObj;
-        }
-
-        @Override
-        public void visit(Node n) {
-        }
-
-        @Override
-        public void visit(Way w) {
-        }
-
-        @Override
-        public void visit(Relation r) {
-            if (r == null) {
-                return;
-            }
-            relObj.add("members", getMembersArray(r.getMembers()));
-        }
-
-        private JsonArrayBuilder getMembersArray(Iterable<RelationMember> members) {
-            final JsonArrayBuilder builder = Json.createArrayBuilder();
-            for (RelationMember rm : members) {
-                final JsonObjectBuilder memberObj = Json.createObjectBuilder();
-                long id = rm.getMember().getUniqueId();
-                String role = rm.getRole();
-                String type = rm.isNode() ? "Node" : rm.isWay() ? "Way" : rm.isRelation() ? "Relation" : "Unknown";
-                memberObj.add("id", Long.toString(id));
-                memberObj.add("type", type);
-                memberObj.add("role", role);
-
-                builder.add(memberObj);
-            }
-            return builder;
-        }
+    protected JsonArrayBuilder getCoorArray(JsonArrayBuilder builder, LatLon c) {
+        return getCoorArray(builder, projection.latlon2eastNorth(c));
     }
 
-    private JsonArrayBuilder getCoorArray(JsonArrayBuilder builder, LatLon c) {
-        return getCoorArray(builder, projection.latlon2eastNorth(c).subtract(origin));
-    }
-
-    private static JsonArrayBuilder getCoorArray(JsonArrayBuilder builder, EastNorth c) {
+    protected static JsonArrayBuilder getCoorArray(JsonArrayBuilder builder, EastNorth c) {
         return (builder != null ? builder : Json.createArrayBuilder())
                 .add(BigDecimal.valueOf(c.getX()).setScale(11, RoundingMode.HALF_UP))
                 .add(BigDecimal.valueOf(c.getY()).setScale(11, RoundingMode.HALF_UP));
@@ -258,36 +198,25 @@ public class GeoJSONWriter {
         // Properties
         final JsonObjectBuilder propObj = Json.createObjectBuilder();
         for (Entry<String, String> t : p.getKeys().entrySet()) {
-            String key = t.getKey();
-            if(!key.equals("x") && !key.equals("y"))
-                propObj.add(t.getKey(), convertValueToJson(t.getValue()));
+            propObj.add(t.getKey(), convertValueToJson(t.getValue()));
         }
         final JsonObject prop = propObj.build();
-
-        // Relation
-        final JsonObjectBuilder relationObj = Json.createObjectBuilder();
-        p.accept(new RelationPrimitiveVisitor(relationObj));
-        final JsonObject rel = relationObj.build();
 
         // Geometry
         final JsonObjectBuilder geomObj = Json.createObjectBuilder();
         p.accept(new GeometryPrimitiveVisitor(geomObj));
         final JsonObject geom = geomObj.build();
 
-        // Build primitive JSON object
-        final JsonObjectBuilder primitiveObj = Json.createObjectBuilder();
-        primitiveObj.add("type", "Feature");
-        primitiveObj.add("id", Long.toString(p.getUniqueId()));
-        if (!prop.isEmpty())
-            primitiveObj.add("properties", prop);
-        if (!geom.isEmpty())
-            primitiveObj.add("geometry", geom);
-        if (!rel.isEmpty())
-            primitiveObj.add("relation", rel);
-        array.add(primitiveObj);
+        if (!geom.isEmpty()) {
+            // Build primitive JSON object
+            array.add(Json.createObjectBuilder()
+                    .add("type", "Feature")
+                    .add("properties", prop.isEmpty() ? JsonValue.NULL : prop)
+                    .add("geometry", geom.isEmpty() ? JsonValue.NULL : geom));
+        }
     }
 
-    private static JsonValue convertValueToJson(String value) {
+    protected static JsonValue convertValueToJson(String value) {
         if (value.startsWith(JSON_VALUE_START_MARKER) && value.endsWith(JSON_VALUE_END_MARKER)) {
             try (JsonParser parser = Json.createParser(new StringReader(value))) {
                 if (parser.hasNext() && parser.next() != null) {
