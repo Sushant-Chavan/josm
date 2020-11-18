@@ -43,11 +43,26 @@ public final class Node extends OsmPrimitive implements INode {
     @Override
     public void setCoor(LatLon coor) {
         updateCoor(coor, null);
+
+        // Add projected coordinates as tags for cartesian coordinates
+        double x = east;
+        double y = north;
+        if (Double.isNaN(x) || Double.isNaN(y)) {
+            EastNorth en = ProjectionRegistry.getProjection().latlon2eastNorth(coor);
+            x = en.east();
+            y = en.north();
+        }
+        put("x", String.format("%.3f", x));
+        put("y", String.format("%.3f", y));
     }
 
     @Override
     public void setEastNorth(EastNorth eastNorth) {
         updateCoor(null, eastNorth);
+
+        // Add projected coordinates as tags for cartesian coordinates
+        put("x", String.format("%.3f", eastNorth.east()));
+        put("y", String.format("%.3f", eastNorth.north()));
     }
 
     private void updateCoor(LatLon coor, EastNorth eastNorth) {
