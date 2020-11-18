@@ -258,7 +258,9 @@ public class GeoJSONWriter {
         // Properties
         final JsonObjectBuilder propObj = Json.createObjectBuilder();
         for (Entry<String, String> t : p.getKeys().entrySet()) {
-            propObj.add(t.getKey(), convertValueToJson(t.getValue()));
+            String key = t.getKey();
+            if(!key.equals("x") && !key.equals("y"))
+                propObj.add(t.getKey(), convertValueToJson(t.getValue()));
         }
         final JsonObject prop = propObj.build();
 
