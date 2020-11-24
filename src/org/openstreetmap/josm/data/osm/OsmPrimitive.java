@@ -258,6 +258,28 @@ public abstract class OsmPrimitive extends AbstractPrimitive implements Template
         }
     }
 
+    @Override
+    public void setOsmId(long id, int version, boolean allowNegativeId) {
+        if (!allowNegativeId) {
+            setOsmId(id, version);
+        } else {
+            checkDatasetNotReadOnly();
+            boolean locked = writeLock();
+            try {
+                if (dataSet != null && id != this.id) {
+                    DataSet datasetCopy = dataSet;
+                    // Reindex primitive
+                    datasetCopy.removePrimitive(this);
+                    this.id = id;
+                    datasetCopy.addPrimitive(this);
+                }
+                super.setOsmId(id, version, allowNegativeId);
+            } finally {
+                writeUnlock(locked);
+            }
+        }
+    }
+
     /**
      * Clears the metadata, including id and version known to the OSM API.
      * The id is a new unique id. The version, changeset and timestamp are set to 0.

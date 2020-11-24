@@ -241,6 +241,17 @@ public abstract class AbstractPrimitive implements IPrimitive {
         this.setIncomplete(false);
     }
 
+    @Override
+    public void setOsmId(long id, int version, boolean allowNegativeId) {
+        if (!allowNegativeId)
+            setOsmId(id, version);
+        else {
+            this.id = id;
+            this.version = version;
+            this.setIncomplete(false);
+        }
+    }
+
     /**
      * Clears the metadata, including id and version known to the OSM API.
      * The id is a new unique id. The version, changeset and timestamp are set to 0.
