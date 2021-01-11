@@ -4,3 +4,30 @@ build/
 build2/
 
 dist/
+
+resources/CONTRIBUTION
+
+resources/LICENSE
+
+resources/README
+
+resources/REVISION
+
+tools/ivy/ivy-2.5.0.jar
+
+# ANT Built files
+resources/data/projection/custom-epsg
+
+src/org/openstreetmap/josm/gui/mappaint/mapcss/parsergen/MapCSSParser.java
+
+src/org/openstreetmap/josm/gui/mappaint/mapcss/parsergen/MapCSSParserConstants.java
+
+src/org/openstreetmap/josm/gui/mappaint/mapcss/parsergen/MapCSSParserTokenManager.java
+
+src/org/openstreetmap/josm/gui/mappaint/mapcss/parsergen/ParseException.java
+
+src/org/openstreetmap/josm/gui/mappaint/mapcss/parsergen/SimpleCharStream.java
+
+src/org/openstreetmap/josm/gui/mappaint/mapcss/parsergen/Token.java
+
+src/org/openstreetmap/josm/gui/mappaint/mapcss/parsergen/TokenMgrError.java
