@@ -206,7 +206,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private LatLon getLatLon(final JsonArray coordinates) {
+    protected LatLon getLatLon(final JsonArray coordinates) {
         return projection.eastNorth2latlon(new EastNorth(
                 parseCoordinate(coordinates.get(0)),
                 parseCoordinate(coordinates.get(1))));
@@ -222,17 +222,17 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private void parsePoint(final JsonObject feature, final JsonArray coordinates) {
+    protected void parsePoint(final JsonObject feature, final JsonArray coordinates) {
         fillTagsFromFeature(feature, createNode(getLatLon(coordinates)));
     }
 
-    private void parseMultiPoint(final JsonObject feature, final JsonObject geometry) {
+    protected void parseMultiPoint(final JsonObject feature, final JsonObject geometry) {
         for (JsonValue coordinate : geometry.getJsonArray(COORDINATES)) {
             parsePoint(feature, coordinate.asJsonArray());
         }
     }
 
-    private void parseLineString(final JsonObject feature, final JsonArray coordinates) {
+    protected void parseLineString(final JsonObject feature, final JsonArray coordinates) {
         if (!coordinates.isEmpty()) {
             createWay(coordinates, false)
                 .ifPresent(way -> fillTagsFromFeature(feature, way));
@@ -245,7 +245,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private void parsePolygon(final JsonObject feature, final JsonArray coordinates) {
+    protected void parsePolygon(final JsonObject feature, final JsonArray coordinates) {
         final int size = coordinates.size();
         if (size == 1) {
             createWay(coordinates.getJsonArray(0), true)
