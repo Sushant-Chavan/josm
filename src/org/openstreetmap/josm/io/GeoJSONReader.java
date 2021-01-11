@@ -58,12 +58,12 @@ public class GeoJSONReader extends AbstractReader {
     private static final String LINK = "link";
     private static final String COORDINATES = "coordinates";
     private static final String FEATURES = "features";
-    private static final String PROPERTIES = "properties";
-    private static final String GEOMETRY = "geometry";
-    private static final String TYPE = "type";
+    protected static final String PROPERTIES = "properties";
+    protected static final String GEOMETRY = "geometry";
+    protected static final String TYPE = "type";
     /** The record separator is 0x1E per RFC 7464 */
     private static final byte RECORD_SEPARATOR_BYTE = 0x1E;
-    private Projection projection = Projections.getProjectionByCode("EPSG:4326"); // WGS 84
+    protected Projection projection = Projections.getProjectionByCode("EPSG:4326"); // WGS 84
 
     GeoJSONReader() {
         // Restricts visibility
@@ -130,7 +130,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private void parseFeatureCollection(final JsonArray features) {
+    protected void parseFeatureCollection(final JsonArray features) {
         for (JsonValue feature : features) {
             if (feature instanceof JsonObject) {
                 parseFeature((JsonObject) feature);
@@ -138,7 +138,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private void parseFeature(final JsonObject feature) {
+    protected void parseFeature(final JsonObject feature) {
         JsonValue geometry = feature.get(GEOMETRY);
         if (geometry != null && geometry.getValueType() == JsonValue.ValueType.OBJECT) {
             parseGeometry(feature, geometry.asJsonObject());
@@ -152,7 +152,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private void parseNonGeometryFeature(final JsonObject feature, final JsonObject properties) {
+    protected void parseNonGeometryFeature(final JsonObject feature, final JsonObject properties) {
         // get relation type
         JsonValue type = properties.get(TYPE);
         if (type == null || properties.getValueType() == JsonValue.ValueType.STRING) {
@@ -173,7 +173,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private void parseGeometry(final JsonObject feature, final JsonObject geometry) {
+    protected void parseGeometry(final JsonObject feature, final JsonObject geometry) {
         if (geometry == null) {
             parseNullGeometry(feature);
             return;
@@ -206,7 +206,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private LatLon getLatLon(final JsonArray coordinates) {
+    protected LatLon getLatLon(final JsonArray coordinates) {
         return projection.eastNorth2latlon(new EastNorth(
                 parseCoordinate(coordinates.get(0)),
                 parseCoordinate(coordinates.get(1))));
@@ -222,17 +222,17 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private void parsePoint(final JsonObject feature, final JsonArray coordinates) {
+    protected void parsePoint(final JsonObject feature, final JsonArray coordinates) {
         fillTagsFromFeature(feature, createNode(getLatLon(coordinates)));
     }
 
-    private void parseMultiPoint(final JsonObject feature, final JsonObject geometry) {
+    protected void parseMultiPoint(final JsonObject feature, final JsonObject geometry) {
         for (JsonValue coordinate : geometry.getJsonArray(COORDINATES)) {
             parsePoint(feature, coordinate.asJsonArray());
         }
     }
 
-    private void parseLineString(final JsonObject feature, final JsonArray coordinates) {
+    protected void parseLineString(final JsonObject feature, final JsonArray coordinates) {
         if (!coordinates.isEmpty()) {
             createWay(coordinates, false)
                 .ifPresent(way -> fillTagsFromFeature(feature, way));
@@ -245,7 +245,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private void parsePolygon(final JsonObject feature, final JsonArray coordinates) {
+    protected void parsePolygon(final JsonObject feature, final JsonArray coordinates) {
         final int size = coordinates.size();
         if (size == 1) {
             createWay(coordinates.getJsonArray(0), true)
@@ -273,7 +273,7 @@ public class GeoJSONReader extends AbstractReader {
         }
     }
 
-    private Node createNode(final LatLon latlon) {
+    protected Node createNode(final LatLon latlon) {
         final List<Node> existingNodes = getDataSet().searchNodes(new BBox(latlon, latlon));
         if (!existingNodes.isEmpty()) {
             // reuse existing node, avoid multiple nodes on top of each other
@@ -284,7 +284,7 @@ public class GeoJSONReader extends AbstractReader {
         return node;
     }
 
-    private Optional<Way> createWay(final JsonArray coordinates, final boolean autoClose) {
+    protected Optional<Way> createWay(final JsonArray coordinates, final boolean autoClose) {
         if (coordinates.isEmpty()) {
             return Optional.empty();
         }
@@ -329,7 +329,7 @@ public class GeoJSONReader extends AbstractReader {
      * @param feature the GeoJSON feature
      * @param primitive the OSM primitive
      */
-    private static void fillTagsFromFeature(final JsonObject feature, final OsmPrimitive primitive) {
+    protected static void fillTagsFromFeature(final JsonObject feature, final OsmPrimitive primitive) {
         if (feature != null) {
             primitive.setKeys(getTags(feature));
         }

@@ -254,6 +254,20 @@ public interface IPrimitive extends Tagged, PrimitiveId, Stylable, Comparable<IP
     void setOsmId(long id, int version);
 
     /**
+     * Sets the id and the version of this primitive if it is known to the OSM API.
+     *
+     * Since we know the id and its version it can't be incomplete anymore. incomplete
+     * is set to false.
+     *
+     * @param id the id. &gt; 0 required
+     * @param version the version &gt; 0 required
+     * @throws IllegalArgumentException if id &lt;= 0
+     * @throws IllegalArgumentException if version &lt;= 0
+     * @throws DataIntegrityProblemException if id is changed and primitive was already added to the dataset
+     */
+    void setOsmId(long id, int version, boolean allowNegativeId);
+
+    /**
      * Replies the user who has last touched this object. May be null.
      *
      * @return the user who has last touched this object. May be null.

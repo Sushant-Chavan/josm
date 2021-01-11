@@ -53,8 +53,8 @@ public class GeoJSONWriter {
     protected final DataSet data;
     protected Projection projection;
     protected static final BooleanProperty SKIP_EMPTY_NODES = new BooleanProperty("geojson.export.skip-empty-nodes", true);
-    private static final BooleanProperty UNTAGGED_CLOSED_IS_POLYGON = new BooleanProperty("geojson.export.untagged-closed-is-polygon", false);
-    private static final Set<Way> processedMultipolygonWays = new HashSet<>();
+    protected static final BooleanProperty UNTAGGED_CLOSED_IS_POLYGON = new BooleanProperty("geojson.export.untagged-closed-is-polygon", false);
+    protected static final Set<Way> processedMultipolygonWays = new HashSet<>();
 
     /**
      * This is used to determine that a tag should be interpreted as a json
@@ -109,7 +109,7 @@ public class GeoJSONWriter {
 
     protected class GeometryPrimitiveVisitor implements OsmPrimitiveVisitor {
 
-        private final JsonObjectBuilder geomObj;
+        protected final JsonObjectBuilder geomObj;
 
         GeometryPrimitiveVisitor(JsonObjectBuilder geomObj) {
             this.geomObj = geomObj;
@@ -167,7 +167,7 @@ public class GeoJSONWriter {
             }
         }
 
-        private JsonArrayBuilder getCoorsArray(Iterable<Node> nodes) {
+        protected JsonArrayBuilder getCoorsArray(Iterable<Node> nodes) {
             final JsonArrayBuilder builder = Json.createArrayBuilder();
             for (Node n : nodes) {
                 LatLon ll = n.getCoor();

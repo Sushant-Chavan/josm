@@ -22,6 +22,7 @@ import org.openstreetmap.josm.data.osm.visitor.OsmPrimitiveVisitor;
 import org.openstreetmap.josm.data.projection.Projections;
 import org.openstreetmap.josm.io.GeoJSONWriter;
 import org.openstreetmap.josm.tools.Logging;
+import org.openstreetmap.josm.gui.mappaint.ElemStyles;
 
 /**
  * Writes OSM data as a customized GeoJSON string, using JSR 353: Java API for JSON Processing (JSON-P).
@@ -70,7 +71,30 @@ public class KeloJSONWriter extends GeoJSONWriter{
         }
     }
 
-    private static class RelationPrimitiveVisitor implements OsmPrimitiveVisitor {
+    protected class CustomGeometryPrimitiveVisitor extends GeometryPrimitiveVisitor {
+
+        CustomGeometryPrimitiveVisitor(JsonObjectBuilder geomObj) {
+            super(geomObj);
+        }
+
+        @Override
+        public void visit(Way w) {
+            if (w != null) {
+                super.visit(w);
+                geomObj.add("nodeIds", Json.createArrayBuilder().add(getNodeIdsArray(w.getNodes())));
+            }
+        }
+
+        protected JsonArrayBuilder getNodeIdsArray(Iterable<Node> nodes) {
+            final JsonArrayBuilder builder = Json.createArrayBuilder();
+            for (Node n : nodes) {
+                builder.add(n.getUniqueId());
+            }
+            return builder;
+        }
+    }
+
+    private class RelationPrimitiveVisitor implements OsmPrimitiveVisitor {
 
         private final JsonObjectBuilder relObj;
 
@@ -101,7 +125,7 @@ public class KeloJSONWriter extends GeoJSONWriter{
                 long id = rm.getMember().getUniqueId();
                 String role = rm.getRole();
                 String type = rm.isNode() ? "Node" : rm.isWay() ? "Way" : rm.isRelation() ? "Relation" : "Unknown";
-                memberObj.add("id", Long.toString(id));
+                memberObj.add("id", id);
                 memberObj.add("type", type);
                 memberObj.add("role", role);
 
@@ -139,13 +163,13 @@ public class KeloJSONWriter extends GeoJSONWriter{
 
         // Geometry
         final JsonObjectBuilder geomObj = Json.createObjectBuilder();
-        p.accept(new GeometryPrimitiveVisitor(geomObj));
+        p.accept(new CustomGeometryPrimitiveVisitor(geomObj));
         final JsonObject geom = geomObj.build();
 
         // Build primitive JSON object
         final JsonObjectBuilder primitiveObj = Json.createObjectBuilder();
         primitiveObj.add("type", "Feature");
-        primitiveObj.add("id", Long.toString(p.getUniqueId()));
+        primitiveObj.add("id", p.getUniqueId());
         if (!prop.isEmpty())
             primitiveObj.add("properties", prop);
         if (!geom.isEmpty())
