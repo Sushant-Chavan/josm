@@ -62,7 +62,7 @@ public class KeloJSONWriter extends GeoJSONWriter{
             if (p instanceof Node){
                 for (Entry<String, String> t : p.getKeys().entrySet()) {
                     if (t.getKey().equals("name") && t.getValue().equals("origin")){
-                        origin = projection.latlon2eastNorth(((Node)p).getCoor());
+                        origin = projection.latlon2eastNorth(((Node)p).getCoor().getRoundedToOsmPrecision());
                         Logging.info("Setting custom origin at: " + origin.east() + "," + origin.north());
                         return;
                     }
@@ -137,7 +137,7 @@ public class KeloJSONWriter extends GeoJSONWriter{
 
     @Override
     protected JsonArrayBuilder getCoorArray(JsonArrayBuilder builder, LatLon c) {
-        return GeoJSONWriter.getCoorArray(builder, projection.latlon2eastNorth(c).subtract(origin));
+        return GeoJSONWriter.getCoorArray(builder, projection.latlon2eastNorth(c.getRoundedToOsmPrecision()).subtract(origin));
     }
 
     @Override

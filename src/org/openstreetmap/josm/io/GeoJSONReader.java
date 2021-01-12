@@ -209,7 +209,7 @@ public class GeoJSONReader extends AbstractReader {
     protected LatLon getLatLon(final JsonArray coordinates) {
         return projection.eastNorth2latlon(new EastNorth(
                 parseCoordinate(coordinates.get(0)),
-                parseCoordinate(coordinates.get(1))));
+                parseCoordinate(coordinates.get(1)))).getRoundedToOsmPrecision();
     }
 
     private static double parseCoordinate(JsonValue coordinate) {
