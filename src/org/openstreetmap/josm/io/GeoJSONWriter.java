@@ -10,10 +10,12 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Stream;
+import java.util.Comparator;
 
 import javax.json.Json;
 import javax.json.JsonArrayBuilder;
@@ -42,6 +44,7 @@ import org.openstreetmap.josm.data.projection.Projections;
 import org.openstreetmap.josm.gui.mappaint.ElemStyles;
 import org.openstreetmap.josm.tools.Logging;
 import org.openstreetmap.josm.tools.Pair;
+import org.openstreetmap.josm.data.osm.OsmPrimitiveComparator;
 
 /**
  * Writes OSM data as a GeoJSON string, using JSR 353: Java API for JSON Processing (JSON-P).
@@ -256,14 +259,19 @@ public class GeoJSONWriter {
         if (ds != null) {
             processedMultipolygonWays.clear();
             Collection<OsmPrimitive> primitives = ds.allNonDeletedPrimitives();
-            // Relations first
+
+            // Create a list from the collection so that we can sort it
+            List<OsmPrimitive> primitiveList = new ArrayList<OsmPrimitive>();
             for (OsmPrimitive p : primitives) {
-                if (p instanceof Relation)
-                    appendPrimitive(p, array);
+                primitiveList.add(p);
             }
-            for (OsmPrimitive p : primitives) {
-                if (!(p instanceof Relation))
-                    appendPrimitive(p, array);
+            // First sort the primitives in the order Nodes, Ways and Relations and within each primitive type sort them based on the Unique ID
+            final Comparator<OsmPrimitive> orderingNodesWaysRelations = OsmPrimitiveComparator.orderingNodesWaysRelations();
+            final Comparator<OsmPrimitive> byUniqueId = OsmPrimitiveComparator.comparingUniqueId();
+            primitiveList.sort(orderingNodesWaysRelations.thenComparing(byUniqueId));
+
+            for (OsmPrimitive p : primitiveList) {
+                appendPrimitive(p, array);
             }
             processedMultipolygonWays.clear();
         }
