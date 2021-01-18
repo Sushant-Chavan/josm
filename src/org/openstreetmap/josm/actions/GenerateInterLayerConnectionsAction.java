@@ -28,6 +28,7 @@ import org.openstreetmap.josm.tools.Shortcut;
 import org.openstreetmap.josm.tools.Logging;
 import org.openstreetmap.josm.data.osm.OsmPrimitiveComparator;
 import org.openstreetmap.josm.data.osm.TagMap;
+import org.openstreetmap.josm.data.osm.IPrimitive;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.Relation;
@@ -55,20 +56,32 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
 
         // #17682 - Run the action later in EDT to make sure the KeyEvent triggering it is consumed before the dialog is shown
         SwingUtilities.invokeLater(() -> {
-            Logging.info("Generating inter-layer connections");
             
             Collection<OsmPrimitive> primitives = getSortedOsmPrimitives();
             if (primitives != null && primitives.size() > 0)
             {
-                Collection<Node> topologyNodes = getTopologicalNodes();
                 Collection<Way> areaWays = getAreaWays();
 
+                Logging.info("Generating inter-layer topological connections");
+                Collection<Node> topologyNodes = getTopologicalNodes();
                 for (Node node : topologyNodes) {
                     for (Way area : areaWays) {
                         if (areaContainsNode(area, node))
                         {
-                            establishInterLayerConnection(area, node);
+                            establishTopologicalConnection(area, node);
                             break;
+                        }
+                    }
+                }
+
+                Logging.info("Generating inter-layer functional connections");
+                Collection<IPrimitive> functionalWays = getFunctionalWays();
+                for (Way area : areaWays) {
+                    List<IPrimitive> zones = Geometry.filterInsideAnyPolygon(functionalWays, area);
+                    if(zones.size() > 0)
+                    {
+                        for (IPrimitive zone : zones) {
+                            establishFunctionalConnection(area, (Way)zone);
                         }
                     }
                 }
@@ -166,11 +179,23 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         return areaWays;
     }
 
+    private Collection<IPrimitive> getFunctionalWays() {
+        Collection<OsmPrimitive> functionalPrimitives = getSortedOsmPrimitives("functional");
+        Collection<IPrimitive> functionalWays = new TreeSet<IPrimitive>();
+        for (OsmPrimitive p : functionalPrimitives) {
+            if (p instanceof Way && ((Way)p).isClosed())
+            {
+                functionalWays.add((IPrimitive)p);
+            }
+        }
+        return functionalWays;
+    }
+
     private boolean areaContainsNode(Way area, Node node) {
         return Geometry.nodeInsidePolygon(node, area.getNodes());
     }
 
-    private boolean establishInterLayerConnection(Way area, Node node) {
+    private boolean establishTopologicalConnection(Way area, Node node) {
         DataSet ds = getDataset();
         if (ds == null)
             return false;
@@ -215,6 +240,77 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
             else
             {
                 RelationMember newMember = new RelationMember("child", node);
+                boolean isNew = true;
+                for (RelationMember rm : relation.getMembers())
+                {
+                    if (rm.equals(newMember))
+                    {
+                        isNew = false;
+                        break;
+                    }
+                }
+                if (isNew)
+                {
+                    relation.addMember(newMember);
+                    ds.beginUpdate();
+                    try { 
+                        ds.removePrimitive(relation);
+                        ds.addPrimitive(relation);
+                    } 
+                    finally { 
+                        ds.endUpdate(); 
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean establishFunctionalConnection(Way area, Way zone) {
+        DataSet ds = getDataset();
+        if (ds == null)
+            return false;
+
+        String areaName = null;
+        TagMap areaKeys = area.getKeys();
+        if (!areaKeys.isEmpty() && areaKeys.containsKey("name"))
+        {
+            areaName = areaKeys.get("name");
+
+            Collection<OsmPrimitive> primitives = getSortedOsmPrimitives("functional");
+            Relation relation = null;
+            for (OsmPrimitive p : primitives) {
+                TagMap keys = p.getKeys();
+                if (p instanceof Relation && !keys.isEmpty() &&
+                    keys.containsKey("type") && keys.get("type").equals("functionalConnection") &&
+                    keys.containsKey("name") && keys.get("name").equals(areaName))
+                {
+                    relation = (Relation)p;
+                }
+            }
+
+            if (relation == null) {
+                Logging.info("Functional connection relation not found for area " + areaName + ". Creating a new one...");
+                relation = new Relation();
+
+                TagMap keys = new TagMap();
+                keys.put("layer", "functional");
+                keys.put("type", "functionalConnection");
+                keys.put("name", areaName);
+                relation.setKeys(keys);
+                relation.addMember(new RelationMember("parent", area));
+                relation.addMember(new RelationMember("child", zone));
+                ds.beginUpdate();
+                try { 
+                    ds.addPrimitive(relation);
+                } 
+                finally { 
+                    ds.endUpdate(); 
+                }
+            }
+            else
+            {
+                RelationMember newMember = new RelationMember("child", zone);
                 boolean isNew = true;
                 for (RelationMember rm : relation.getMembers())
                 {
