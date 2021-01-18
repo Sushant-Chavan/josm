@@ -65,6 +65,7 @@ import org.openstreetmap.josm.actions.InfoAction;
 import org.openstreetmap.josm.actions.InfoWebAction;
 import org.openstreetmap.josm.actions.InvertSelectionAction;
 import org.openstreetmap.josm.actions.JoinAreasAction;
+import org.openstreetmap.josm.actions.GenerateInterLayerConnectionsAction;
 import org.openstreetmap.josm.actions.JoinNodeWayAction;
 import org.openstreetmap.josm.actions.JosmAction;
 import org.openstreetmap.josm.actions.JumpToAction;
@@ -296,6 +297,8 @@ public class MainMenu extends JMenuBar {
     public final UnGlueAction unglueNodes = new UnGlueAction();
     /** Tools / Join overlapping Areas */
     public final JoinAreasAction joinAreas = new JoinAreasAction();
+    /** Tools / Generate InterLayer Connections */
+    public final GenerateInterLayerConnectionsAction interLayerConnections = new GenerateInterLayerConnectionsAction();
     /** Tools / Create multipolygon */
     public final CreateMultipolygonAction createMultipolygon = new CreateMultipolygonAction(false);
     /** Tools / Update multipolygon */
@@ -881,6 +884,7 @@ public class MainMenu extends JMenuBar {
         add(toolsMenu, joinAreas);
         add(toolsMenu, createMultipolygon);
         add(toolsMenu, updateMultipolygon);
+        add(toolsMenu, interLayerConnections);
 
         // -- changeset manager toggle action
         final JCheckBoxMenuItem mi = MainMenu.addWithCheckbox(windowMenu, changesetManager,
