@@ -90,7 +90,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         setEnabled(getLayerManager().getEditLayer() != null);
     }
 
-    protected DataSet getDataset() {
+    private DataSet getDataset() {
         DataSet ds = getLayerManager().getEditDataSet();
         if (ds == null)
         {
@@ -99,7 +99,24 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         return ds;
     }
 
-    protected Collection<OsmPrimitive> getSortedOsmPrimitives() {
+    private String getLayerName(OsmPrimitive p) {
+        String layerName = null;
+        if (p != null)
+        {
+            TagMap keys = p.getKeys();
+            if (!keys.isEmpty() && keys.containsKey("layer"))
+            {
+                layerName = keys.get("layer");
+            }
+        }
+        return layerName;
+    }
+
+    private Collection<OsmPrimitive> getSortedOsmPrimitives() {
+        return getSortedOsmPrimitives(null);
+    }
+
+    private Collection<OsmPrimitive> getSortedOsmPrimitives(String layer) {
         DataSet ds = getDataset();
         if (ds != null)
         {
@@ -108,7 +125,9 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
             // Create a list from the collection so that we can sort it
             List<OsmPrimitive> primitiveList = new ArrayList<OsmPrimitive>();
             for (OsmPrimitive p : primitives) {
-                primitiveList.add(p);
+                String layerName = getLayerName(p);
+                if (layer == null || (layerName != null && layerName.equals(layer)))
+                    primitiveList.add(p);
             }
             // First sort the primitives in the order Nodes, Ways and Relations and within each primitive type sort them based on the Unique ID
             final Comparator<OsmPrimitive> orderingNodesWaysRelations = OsmPrimitiveComparator.orderingNodesWaysRelations();
@@ -120,30 +139,26 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         return null;
     }
 
-    protected Collection<Node> getTopologicalNodes() {
-        Collection<OsmPrimitive> primitives = getSortedOsmPrimitives();
-        Collection<Node> topoNodes = new TreeSet<Node>();
-        for (OsmPrimitive p : primitives) {
-            TagMap keys = p.getKeys();
-            if (p instanceof Way && !keys.isEmpty() && 
-                keys.containsKey("layer") && keys.get("layer").equals("topology"))
+    private Collection<Node> getTopologicalNodes() {
+        Collection<OsmPrimitive> topologyPrimitives = getSortedOsmPrimitives("topology");
+        Collection<Node> topologyNodes = new TreeSet<Node>();
+        for (OsmPrimitive p : topologyPrimitives) {
+            if (p instanceof Way)
             {
                 List<Node> nodes = ((Way)p).getNodes();
                 for (Node n : nodes) {
-                    topoNodes.add(n);
+                    topologyNodes.add(n);
                 }
             }
         }
-        return topoNodes;
+        return topologyNodes;
     }
 
-    protected Collection<Way> getAreaWays() {
-        Collection<OsmPrimitive> primitives = getSortedOsmPrimitives();
+    private Collection<Way> getAreaWays() {
+        Collection<OsmPrimitive> areasPrimitives = getSortedOsmPrimitives("areas");
         Collection<Way> areaWays = new TreeSet<Way>();
-        for (OsmPrimitive p : primitives) {
-            TagMap keys = p.getKeys();
-            if (p instanceof Way && ((Way)p).isClosed() && !keys.isEmpty() && 
-                keys.containsKey("layer") && keys.get("layer").equals("areas"))
+        for (OsmPrimitive p : areasPrimitives) {
+            if (p instanceof Way && ((Way)p).isClosed())
             {
                 areaWays.add((Way)p);
             }
@@ -151,11 +166,11 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         return areaWays;
     }
 
-    protected boolean areaContainsNode(Way area, Node node) {
+    private boolean areaContainsNode(Way area, Node node) {
         return Geometry.nodeInsidePolygon(node, area.getNodes());
     }
 
-    protected boolean establishInterLayerConnection(Way area, Node node) {
+    private boolean establishInterLayerConnection(Way area, Node node) {
         DataSet ds = getDataset();
         if (ds == null)
             return false;
@@ -166,12 +181,11 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         {
             areaName = areaKeys.get("name");
 
-            Collection<OsmPrimitive> primitives = getSortedOsmPrimitives();
+            Collection<OsmPrimitive> primitives = getSortedOsmPrimitives("topology");
             Relation relation = null;
             for (OsmPrimitive p : primitives) {
                 TagMap keys = p.getKeys();
-                if (p instanceof Relation && !keys.isEmpty() && 
-                    keys.containsKey("layer") && keys.get("layer").equals("areas") &&
+                if (p instanceof Relation && !keys.isEmpty() &&
                     keys.containsKey("type") && keys.get("type").equals("topologyConnection") &&
                     keys.containsKey("name") && keys.get("name").equals(areaName))
                 {
@@ -184,7 +198,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                 relation = new Relation();
 
                 TagMap keys = new TagMap();
-                keys.put("layer", "areas");
+                keys.put("layer", "topology");
                 keys.put("type", "topologyConnection");
                 keys.put("name", areaName);
                 relation.setKeys(keys);
