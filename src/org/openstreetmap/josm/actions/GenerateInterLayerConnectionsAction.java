@@ -12,6 +12,7 @@ import java.util.Collection;
 import java.util.ArrayList;
 import java.util.TreeSet;
 import java.util.List;
+import java.util.Arrays;
 
 import javax.swing.SwingUtilities;
 
@@ -40,6 +41,12 @@ import org.openstreetmap.josm.tools.Geometry;
  * and when ok is pressed, a new node is created at the specified position.
  */
 public final class GenerateInterLayerConnectionsAction extends JosmAction {
+    final String AREAS_LAYER_NAME = "areas";
+    final String SUBAREAS_LAYER_NAME = "subareas";
+    final String ZONES_LAYER_NAME = "zones";
+    final String TOPOLOGY_LAYER_NAME = "topology";
+    final String TRANSITION_RELATION_NAME = "transition";
+    final String INTERLAYER_CORRESPONDENCE = "association";
     /**
      * Constructs a new {@code GenerateInterLayerConnectionsAction}.
      */
@@ -60,37 +67,10 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
             Collection<OsmPrimitive> primitives = getSortedOsmPrimitives();
             if (primitives != null && primitives.size() > 0)
             {
-                Collection<Way> areaWays = getAreaWays();
-
-                Logging.info("Generating inter-layer topological connections");
-                int nAdditions = 0;
-                Collection<Node> topologyNodes = getTopologicalNodes();
-                for (Node node : topologyNodes) {
-                    for (Way area : areaWays) {
-                        if (areaContainsNode(area, node))
-                        {
-                            if (establishTopologicalConnection(area, node))
-                                nAdditions++;
-                            break;
-                        }
-                    }
-                }
-                Logging.info("Generated " + nAdditions + " new inter-layer topological connections.");
-                nAdditions = 0;
-
-                Logging.info("Generating inter-layer functional connections");
-                Collection<IPrimitive> functionalWays = getFunctionalWays();
-                for (Way area : areaWays) {
-                    List<IPrimitive> zones = Geometry.filterInsideAnyPolygon(functionalWays, area);
-                    if(zones.size() > 0)
-                    {
-                        for (IPrimitive zone : zones) {
-                            if (establishZoneConnection(area, (Way)zone))
-                                nAdditions++;
-                        }
-                    }
-                }
-                Logging.info("Generated " + nAdditions + " new inter-layer functional connections.");
+                processAreasLayer();
+                processSubAreasLayer();
+                processZonesLayer();
+                processTopologyLayer();
             }
             else
             {
@@ -159,7 +139,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
     }
 
     private Collection<Node> getTopologicalNodes() {
-        Collection<OsmPrimitive> topologyPrimitives = getSortedOsmPrimitives("topology");
+        Collection<OsmPrimitive> topologyPrimitives = getSortedOsmPrimitives(TOPOLOGY_LAYER_NAME);
         Collection<Node> topologyNodes = new TreeSet<Node>();
         for (OsmPrimitive p : topologyPrimitives) {
             if (p instanceof Way)
@@ -173,32 +153,55 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         return topologyNodes;
     }
 
-    private Collection<Way> getAreaWays() {
-        Collection<OsmPrimitive> areasPrimitives = getSortedOsmPrimitives("areas");
-        Collection<Way> areaWays = new TreeSet<Way>();
-        for (OsmPrimitive p : areasPrimitives) {
+    private Collection<Way> getClosedWays(String layer) {
+        Collection<OsmPrimitive> primitives = getSortedOsmPrimitives(layer);
+        Collection<Way> ways = new TreeSet<Way>();
+        for (OsmPrimitive p : primitives) {
             if (p instanceof Way && ((Way)p).isClosed())
             {
-                areaWays.add((Way)p);
+                ways.add((Way)p);
             }
         }
-        return areaWays;
+        return ways;
     }
 
-    private Collection<IPrimitive> getFunctionalWays() {
-        Collection<OsmPrimitive> functionalPrimitives = getSortedOsmPrimitives("functional");
-        Collection<IPrimitive> functionalWays = new TreeSet<IPrimitive>();
-        for (OsmPrimitive p : functionalPrimitives) {
+    private Collection<IPrimitive> getClosedWaysAsIPrimitives(String layer) {
+        Collection<OsmPrimitive> primitives = getSortedOsmPrimitives(layer);
+        Collection<IPrimitive> ways = new TreeSet<IPrimitive>();
+        for (OsmPrimitive p : primitives) {
             if (p instanceof Way && ((Way)p).isClosed())
             {
-                functionalWays.add((IPrimitive)p);
+                ways.add((IPrimitive)p);
             }
         }
-        return functionalWays;
+        return ways;
     }
 
     private boolean areaContainsNode(Way area, Node node) {
         return Geometry.nodeInsidePolygon(node, area.getNodes());
+    }
+
+
+    private void processTopologyLayer()
+    {
+        Logging.info("Generating inter-layer correspondences for Topology layer...");
+        for (Node node : getTopologicalNodes()) {
+            // Establish correspondences with overlapping polygons
+            List<String> layers = Arrays.asList(AREAS_LAYER_NAME, SUBAREAS_LAYER_NAME, ZONES_LAYER_NAME);
+            for (String layer : layers) {
+                for (Way polygon : getClosedWays(layer)) {
+                    if (areaContainsNode(polygon, node))
+                    {
+                        Relation correspondence = establishCorrespondence(node, polygon, 
+                                                    TOPOLOGY_LAYER_NAME, 
+                                                    INTERLAYER_CORRESPONDENCE, 
+                                                    "parent", layer);
+                        break;
+                    }
+                }
+            }
+        }
+        Logging.info("Generated inter-layer correspondences in Topology layer.");
     }
 
     private boolean establishTopologicalConnection(Way area, Node node) {
@@ -347,5 +350,82 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
             }
         }
         return success;
+    }
+
+    private Relation establishCorrespondence(OsmPrimitive parent, OsmPrimitive child, String layer, String type, String parentRole, String childRole) {
+        DataSet ds = getDataset();
+        if (ds == null)
+            return null;
+
+        // Find if a relation already exists
+        Collection<OsmPrimitive> primitives = getSortedOsmPrimitives(layer);
+        Relation relation = null;
+        for (OsmPrimitive p : primitives) {
+            TagMap keys = p.getKeys();
+            if (p instanceof Relation && !keys.isEmpty() &&
+                keys.containsKey("type") && keys.get("type").equals(type) &&
+                ((Relation)p).firstMember().getMember().equals(parent))
+            {
+                relation = (Relation)p;
+            }
+        }
+
+        // No relation exists for this correspondence, create a new one
+        if (relation == null) {
+            //Logging.info("Creating a new correspondence..");
+            relation = new Relation();
+
+            TagMap keys = new TagMap();
+            keys.put("layer", layer);
+            keys.put("type", type);
+            relation.setKeys(keys);
+            relation.addMember(new RelationMember(parentRole, parent));
+            relation.addMember(new RelationMember(childRole, child));
+            AddNewPrimitiveToDataset(relation);
+        }
+        // Found a relation for ths correspondence, update it
+        else {
+            //Logging.info("Updating existing correspondence..");
+            RelationMember newMember = new RelationMember(childRole, child);
+            boolean isNew = true;
+            for (RelationMember rm : relation.getMembers())
+            {
+                if (rm.equals(newMember))
+                {
+                    isNew = false;
+                    break;
+                }
+            }
+            if (isNew)
+            {
+                relation.addMember(newMember);
+                UpdatePrimitiveInDataset(relation);
+            }
+        }
+
+        return relation;
+    }
+
+    private void AddNewPrimitiveToDataset(OsmPrimitive primitive) {
+        DataSet ds = getDataset();
+        ds.beginUpdate();
+        try {
+            ds.addPrimitive(primitive);
+        } 
+        finally { 
+            ds.endUpdate(); 
+        }
+    }
+
+    private void UpdatePrimitiveInDataset(OsmPrimitive primitive) {
+        DataSet ds = getDataset();
+        ds.beginUpdate();
+        try { 
+            ds.removePrimitive(primitive);
+            ds.addPrimitive(primitive);
+        } 
+        finally { 
+            ds.endUpdate(); 
+        }
     }
 }
