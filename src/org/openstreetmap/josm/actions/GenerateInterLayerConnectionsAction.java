@@ -63,16 +63,20 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                 Collection<Way> areaWays = getAreaWays();
 
                 Logging.info("Generating inter-layer topological connections");
+                int nAdditions = 0;
                 Collection<Node> topologyNodes = getTopologicalNodes();
                 for (Node node : topologyNodes) {
                     for (Way area : areaWays) {
                         if (areaContainsNode(area, node))
                         {
-                            establishTopologicalConnection(area, node);
+                            if (establishTopologicalConnection(area, node))
+                                nAdditions++;
                             break;
                         }
                     }
                 }
+                Logging.info("Generated " + nAdditions + " new inter-layer topological connections.");
+                nAdditions = 0;
 
                 Logging.info("Generating inter-layer functional connections");
                 Collection<IPrimitive> functionalWays = getFunctionalWays();
@@ -81,10 +85,12 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                     if(zones.size() > 0)
                     {
                         for (IPrimitive zone : zones) {
-                            establishFunctionalConnection(area, (Way)zone);
+                            if (establishZoneConnection(area, (Way)zone))
+                                nAdditions++;
                         }
                     }
                 }
+                Logging.info("Generated " + nAdditions + " new inter-layer functional connections.");
             }
             else
             {
@@ -202,6 +208,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
 
         String areaName = null;
         TagMap areaKeys = area.getKeys();
+        boolean success = false;
         if (!areaKeys.isEmpty() && areaKeys.containsKey("name"))
         {
             areaName = areaKeys.get("name");
@@ -219,7 +226,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
             }
 
             if (relation == null) {
-                Logging.info("Topology connection relation not found for area " + areaName + ". Creating a new one...");
+                //Logging.info("Topology connection relation not found for area " + areaName + ". Creating a new one...");
                 relation = new Relation();
 
                 TagMap keys = new TagMap();
@@ -232,6 +239,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                 ds.beginUpdate();
                 try { 
                     ds.addPrimitive(relation);
+                    success = true;
                 } 
                 finally { 
                     ds.endUpdate(); 
@@ -256,6 +264,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                     try { 
                         ds.removePrimitive(relation);
                         ds.addPrimitive(relation);
+                        success = true;
                     } 
                     finally { 
                         ds.endUpdate(); 
@@ -263,16 +272,17 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                 }
             }
         }
-        return false;
+        return success;
     }
 
-    private boolean establishFunctionalConnection(Way area, Way zone) {
+    private boolean establishZoneConnection(Way area, Way zone) {
         DataSet ds = getDataset();
         if (ds == null)
             return false;
 
         String areaName = null;
         TagMap areaKeys = area.getKeys();
+        boolean success = false;
         if (!areaKeys.isEmpty() && areaKeys.containsKey("name"))
         {
             areaName = areaKeys.get("name");
@@ -290,7 +300,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
             }
 
             if (relation == null) {
-                Logging.info("Functional connection relation not found for area " + areaName + ". Creating a new one...");
+                //Logging.info("Functional connection relation not found for area " + areaName + ". Creating a new one...");
                 relation = new Relation();
 
                 TagMap keys = new TagMap();
@@ -303,6 +313,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                 ds.beginUpdate();
                 try { 
                     ds.addPrimitive(relation);
+                    success = true;
                 } 
                 finally { 
                     ds.endUpdate(); 
@@ -327,6 +338,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                     try { 
                         ds.removePrimitive(relation);
                         ds.addPrimitive(relation);
+                        success = true;
                     } 
                     finally { 
                         ds.endUpdate(); 
@@ -334,6 +346,6 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
                 }
             }
         }
-        return false;
+        return success;
     }
 }
