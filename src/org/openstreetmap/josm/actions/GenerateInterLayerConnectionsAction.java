@@ -238,6 +238,42 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         Logging.info("Generated inter-layer correspondences in SubAreas layer.");
     }
 
+    private void processZonesLayer()
+    {
+        Logging.info("Generating inter-layer correspondences for Zones layer...");
+        Collection<Way> zones = getClosedWays(ZONES_LAYER_NAME);
+
+        // Establish connections with overlapping polygons from other layers
+        List<String> layers = Arrays.asList(AREAS_LAYER_NAME, SUBAREAS_LAYER_NAME);
+        for (String layer : layers) {
+            Collection<Way> polygons = getClosedWays(layer);
+            for (Way zone : zones) {
+                for (Way p : polygons) {
+                    Geometry.PolygonIntersection result = Geometry.polygonIntersection(zone.getNodes(), p.getNodes());
+                    if (result != Geometry.PolygonIntersection.OUTSIDE) {
+                        Relation correspondence = establishCorrespondence(zone, p, 
+                                                            ZONES_LAYER_NAME, 
+                                                            INTERLAYER_CORRESPONDENCE, 
+                                                            "parent", layer);
+                    }
+                }
+            }
+        }
+
+        // Establish connections with overlapping nodes from topology layer
+        for (Node node : getTopologicalNodes()) {
+            for (Way zone : zones) {
+                if (areaContainsNode(zone, node))
+                {
+                    Relation correspondence = establishCorrespondence(zone, node,
+                                                ZONES_LAYER_NAME, 
+                                                INTERLAYER_CORRESPONDENCE, 
+                                                "parent", TOPOLOGY_LAYER_NAME);
+                }
+            }
+        }
+        Logging.info("Generated  inter-layer correspondences in Zones layer.");
+    }
 
     private void processTopologyLayer()
     {
@@ -259,154 +295,6 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
             }
         }
         Logging.info("Generated inter-layer correspondences in Topology layer.");
-    }
-
-    private boolean establishTopologicalConnection(Way area, Node node) {
-        DataSet ds = getDataset();
-        if (ds == null)
-            return false;
-
-        String areaName = null;
-        TagMap areaKeys = area.getKeys();
-        boolean success = false;
-        if (!areaKeys.isEmpty() && areaKeys.containsKey("name"))
-        {
-            areaName = areaKeys.get("name");
-
-            Collection<OsmPrimitive> primitives = getSortedOsmPrimitives("topology");
-            Relation relation = null;
-            for (OsmPrimitive p : primitives) {
-                TagMap keys = p.getKeys();
-                if (p instanceof Relation && !keys.isEmpty() &&
-                    keys.containsKey("type") && keys.get("type").equals("topologyConnection") &&
-                    keys.containsKey("name") && keys.get("name").equals(areaName))
-                {
-                    relation = (Relation)p;
-                }
-            }
-
-            if (relation == null) {
-                //Logging.info("Topology connection relation not found for area " + areaName + ". Creating a new one...");
-                relation = new Relation();
-
-                TagMap keys = new TagMap();
-                keys.put("layer", "topology");
-                keys.put("type", "topologyConnection");
-                keys.put("name", areaName);
-                relation.setKeys(keys);
-                relation.addMember(new RelationMember("parent", area));
-                relation.addMember(new RelationMember("child", node));
-                ds.beginUpdate();
-                try { 
-                    ds.addPrimitive(relation);
-                    success = true;
-                } 
-                finally { 
-                    ds.endUpdate(); 
-                }
-            }
-            else
-            {
-                RelationMember newMember = new RelationMember("child", node);
-                boolean isNew = true;
-                for (RelationMember rm : relation.getMembers())
-                {
-                    if (rm.equals(newMember))
-                    {
-                        isNew = false;
-                        break;
-                    }
-                }
-                if (isNew)
-                {
-                    relation.addMember(newMember);
-                    ds.beginUpdate();
-                    try { 
-                        ds.removePrimitive(relation);
-                        ds.addPrimitive(relation);
-                        success = true;
-                    } 
-                    finally { 
-                        ds.endUpdate(); 
-                    }
-                }
-            }
-        }
-        return success;
-    }
-
-    private boolean establishZoneConnection(Way area, Way zone) {
-        DataSet ds = getDataset();
-        if (ds == null)
-            return false;
-
-        String areaName = null;
-        TagMap areaKeys = area.getKeys();
-        boolean success = false;
-        if (!areaKeys.isEmpty() && areaKeys.containsKey("name"))
-        {
-            areaName = areaKeys.get("name");
-
-            Collection<OsmPrimitive> primitives = getSortedOsmPrimitives("functional");
-            Relation relation = null;
-            for (OsmPrimitive p : primitives) {
-                TagMap keys = p.getKeys();
-                if (p instanceof Relation && !keys.isEmpty() &&
-                    keys.containsKey("type") && keys.get("type").equals("functionalConnection") &&
-                    keys.containsKey("name") && keys.get("name").equals(areaName))
-                {
-                    relation = (Relation)p;
-                }
-            }
-
-            if (relation == null) {
-                //Logging.info("Functional connection relation not found for area " + areaName + ". Creating a new one...");
-                relation = new Relation();
-
-                TagMap keys = new TagMap();
-                keys.put("layer", "functional");
-                keys.put("type", "functionalConnection");
-                keys.put("name", areaName);
-                relation.setKeys(keys);
-                relation.addMember(new RelationMember("parent", area));
-                relation.addMember(new RelationMember("child", zone));
-                ds.beginUpdate();
-                try { 
-                    ds.addPrimitive(relation);
-                    success = true;
-                } 
-                finally { 
-                    ds.endUpdate(); 
-                }
-            }
-            else
-            {
-                RelationMember newMember = new RelationMember("child", zone);
-                boolean isNew = true;
-                for (RelationMember rm : relation.getMembers())
-                {
-                    if (rm.equals(newMember))
-                    {
-                        isNew = false;
-                        break;
-                    }
-                }
-                if (isNew)
-                {
-                    relation.addMember(newMember);
-                    ds.beginUpdate();
-                    try { 
-                        ds.removePrimitive(relation);
-                        ds.addPrimitive(relation);
-                        success = true;
-                    } 
-                    finally { 
-                        ds.endUpdate(); 
-                    }
-                }
-            }
-        }
-        return success;
     }
 
     private Relation establishCorrespondence(OsmPrimitive parent, OsmPrimitive child, String layer, String type, String parentRole, String childRole) {
