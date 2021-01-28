@@ -182,6 +182,63 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
     }
 
 
+    private void processSubAreasLayer()
+    {
+        Logging.info("Generating inter-layer correspondences for SubAreas layer...");
+        Collection<Way> subareas = getClosedWays(SUBAREAS_LAYER_NAME);
+
+        // Establish connections with enclosing area
+        Collection<Way> areas = getClosedWays(AREAS_LAYER_NAME);
+        Collection<IPrimitive> subareaPrimitives = getClosedWaysAsIPrimitives(SUBAREAS_LAYER_NAME);
+        for (Way area : areas) {
+            List<IPrimitive> enclosedSubAreas = Geometry.filterInsideAnyPolygon(subareaPrimitives, area);
+            if(enclosedSubAreas.size() > 0)
+            {
+                for (IPrimitive s : enclosedSubAreas) {
+                    // TODO: check if subarea is overlapping with multiple areas and raise errors/warnings
+                    Relation correspondence = establishCorrespondence((OsmPrimitive)s, area, 
+                                                                      SUBAREAS_LAYER_NAME, 
+                                                                      INTERLAYER_CORRESPONDENCE, 
+                                                                      "parent", AREAS_LAYER_NAME);
+                }
+            }
+        }
+
+        // Establish connections with overlapping polygons from other layers
+        List<String> layers = Arrays.asList(ZONES_LAYER_NAME);
+        for (String layer : layers) {
+            Collection<Way> polygons = getClosedWays(layer);
+            for (Way subarea : subareas) {
+                for (Way p : polygons) {
+                    Geometry.PolygonIntersection result = Geometry.polygonIntersection(subarea.getNodes(), p.getNodes());
+                    if (result != Geometry.PolygonIntersection.OUTSIDE) {
+                        Relation correspondence = establishCorrespondence(subarea, p, 
+                                                            SUBAREAS_LAYER_NAME, 
+                                                            INTERLAYER_CORRESPONDENCE, 
+                                                            "parent", layer);
+                    }
+                }
+            }
+        }
+
+        // Establish connections with overlapping nodes from topology layer
+        for (Node node : getTopologicalNodes()) {
+            for (Way subarea : subareas) {
+                if (areaContainsNode(subarea, node))
+                {
+                    Relation correspondence = establishCorrespondence(subarea, node,
+                                                SUBAREAS_LAYER_NAME, 
+                                                INTERLAYER_CORRESPONDENCE, 
+                                                "parent", TOPOLOGY_LAYER_NAME);
+                    break; // Since subareas are not allowed to overlap, a node can only belong to one subarea
+                }
+            }
+        }
+
+        Logging.info("Generated inter-layer correspondences in SubAreas layer.");
+    }
+
+
     private void processTopologyLayer()
     {
         Logging.info("Generating inter-layer correspondences for Topology layer...");
