@@ -35,6 +35,7 @@ import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.Relation;
 import org.openstreetmap.josm.data.osm.RelationMember;
 import org.openstreetmap.josm.tools.Geometry;
+import org.openstreetmap.josm.tools.Pair;
 
 /**
  * This action displays a dialog where the user can enter a latitude and longitude,
@@ -47,6 +48,88 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
     final String TOPOLOGY_LAYER_NAME = "topology";
     final String TRANSITION_RELATION_NAME = "transition";
     final String INTERLAYER_CORRESPONDENCE = "association";
+
+    private class Transition {
+        public Transition() {
+            area1 = null;
+            area2 = null;
+            nodes = new ArrayList<Node>();
+        }
+
+        public Transition(Way a1, Way a2, List<Node> n) {
+            area1 = a1;
+            area2 = a2;
+            nodes = n;
+        }
+
+        public boolean equals(Transition other) {
+            return equalParents(other) && equalNodes(other);
+        }
+
+        public boolean equalParents(Transition other) {
+            return ((this.area1.getUniqueId() == other.area1.getUniqueId() && this.area2.getUniqueId() == other.area2.getUniqueId()) ||
+                    (this.area1.getUniqueId() == other.area2.getUniqueId() && this.area2.getUniqueId() == other.area1.getUniqueId()));
+        }
+
+        public boolean equalNodes(Transition other) {
+            Node firstNode = this.getFirstNode();
+            Node lastNode = this.getLastNode();
+            Node otherFirstNode = other.getFirstNode();
+            Node otherLastNode = other.getLastNode();
+
+            if (firstNode == null || lastNode == null ||
+                otherFirstNode == null || otherLastNode == null) {
+                    return false;
+                }
+
+            return this.nodes.size() == other.nodes.size() &&
+                   ((firstNode.getUniqueId() == otherFirstNode.getUniqueId() && lastNode.getUniqueId() == otherLastNode.getUniqueId()) ||
+                    (firstNode.getUniqueId() == otherLastNode.getUniqueId() && lastNode.getUniqueId() == otherFirstNode.getUniqueId()));
+        }
+
+        public Node getFirstNode() {
+            if (nodes != null) {
+                return nodes.get(0);
+            }
+            else {
+                return null;
+            }
+        }
+
+        public Node getLastNode() {
+            if (nodes != null && nodes.size() > 0) {
+                return nodes.get(nodes.size() - 1);
+            }
+            else {
+                return null;
+            }
+        }
+
+        public void addNode(Node n) {
+            if (nodes != null) {
+                nodes.add(n);
+            }
+        }
+
+        public void setArea(Way area, boolean isFirst) {
+            if (isFirst) {
+                area1 = area;
+            }
+            else {
+                area2 = area;
+            }
+        }
+
+        public boolean isValid() {
+            return area1 != null && area2 != null && nodes != null &&
+                   area1.getUniqueId() != area2.getUniqueId() &&
+                   nodes.size() > 1;
+        }
+
+        public Way area1;
+        public Way area2;
+        public List<Node> nodes; 
+    }
     /**
      * Constructs a new {@code GenerateInterLayerConnectionsAction}.
      */
@@ -153,6 +236,128 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         return topologyNodes;
     }
 
+    private List<Transition> getAreaTransitions(Collection<Way> areas) {
+        List<Transition> transitions = new ArrayList<Transition>();
+        for (Way area : areas) {
+            List<Node> nodes = area.getNodes();
+            for (int i = 0; i < nodes.size(); ) {
+                Transition transition = getNewTransition(area, i);
+                if (transition != null && transition.isValid()) {
+                    boolean isNew = true;
+                    i += transition.nodes.size();
+                    for (Transition t : transitions) {
+                        if (t.equals(transition)) {
+                            isNew = false;
+                        }
+                    }
+                    if (isNew) {
+                        transitions.add(transition);
+                    }
+                }
+                else {
+                    i += 1;
+                }
+            }
+        }
+        transitions = removeDuplicateTransitions(transitions);
+        return transitions;
+    }
+
+    private List<Transition> removeDuplicateTransitions(List<Transition> transitions) {
+        List<Transition> deleteList = new ArrayList<Transition>();
+
+        Collection<OsmPrimitive> primitives = getSortedOsmPrimitives(AREAS_LAYER_NAME);
+        for (OsmPrimitive p : primitives) {
+            TagMap keys = p.getKeys();
+            if (p instanceof Relation && !keys.isEmpty() &&
+                keys.containsKey("type") && keys.get("type").equals(TRANSITION_RELATION_NAME))
+            {
+                Relation relation = (Relation)p;
+                List<Node> nodes = new ArrayList<Node>();
+                for (int i = 2; i < relation.getMembers().size(); i++) {
+                    nodes.add((Node)(relation.getMember(i).getMember()));
+                }
+                Transition et = new Transition((Way)(relation.getMember(0).getMember()), 
+                                               (Way)(relation.getMember(1).getMember()), 
+                                               nodes);
+                for (Transition t : transitions) {
+                    if (t.equals(et)) {
+                        deleteList.add(t);
+                    }
+                    else if (isUpdatedTransition(t, et)) {
+                        List<RelationMember> members = new ArrayList<RelationMember>();
+                        members.add(relation.getMember(0));
+                        members.add(relation.getMember(1));
+                        for (Node n : t.nodes) {
+                            members.add(new RelationMember("node", n));
+                        }
+                        relation.setMembers(null);
+                        relation.setMembers(members);
+                        UpdatePrimitiveInDataset(relation);
+                        deleteList.add(t);
+                    }
+                }
+            }
+        }
+        transitions.removeAll(deleteList);
+        return transitions;
+    }
+
+    private boolean isUpdatedTransition(Transition newT, Transition existingT) {
+        if (!newT.equalParents(existingT)) {
+            return false;
+        }
+
+        List<Node> sharedNodes = existingT.nodes;
+        sharedNodes.retainAll(newT.nodes);
+        return sharedNodes.size() > 1;
+    }
+
+    private Transition getNewTransition(Way area, int nodeStartIdx) {
+        List<Node> nodes = area.getNodes(); 
+        Node firstNode = nodes.get(nodeStartIdx);
+        if (firstNode.getParentWays().size() < 2) {
+            // This node is not shared with other areas. So a transition does not exist
+            return null;
+        }
+
+        Transition t = new Transition();
+        t.setArea(area, true);
+        t.addNode(firstNode);
+
+        int i = nodeStartIdx+1;
+        while(i < nodes.size() - 1) {
+            Node nextNode = nodes.get(i);
+            i += 1; // Update the iterator
+            List<Way> sharedParents = firstNode.getParentWays();
+            sharedParents.retainAll(nextNode.getParentWays());
+            if (sharedParents.size() == 2) {
+                if (t.area2 == null) {
+                    Way adjacentArea = (sharedParents.get(0).getUniqueId() != area.getUniqueId()) ? sharedParents.get(0) : sharedParents.get(1);
+                    t.setArea(adjacentArea, false);
+                }
+                t.addNode(nextNode);
+            }
+            else {
+                break;
+            }
+        }
+
+        if (i == nodes.size() - 1) {
+            Node nextNode = nodes.get(0);
+            List<Way> sharedParents = firstNode.getParentWays();
+            sharedParents.retainAll(nextNode.getParentWays());
+            if (sharedParents.size() == 2) {
+                if (t.area2 == null) {
+                    Way adjacentArea = (sharedParents.get(0).getUniqueId() != area.getUniqueId()) ? sharedParents.get(0) : sharedParents.get(1);
+                    t.setArea(adjacentArea, false);
+                }
+                t.addNode(nextNode);
+            }
+        }
+        return t;
+    }
+
     private Collection<Way> getClosedWays(String layer) {
         Collection<OsmPrimitive> primitives = getSortedOsmPrimitives(layer);
         Collection<Way> ways = new TreeSet<Way>();
@@ -181,6 +386,24 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         return Geometry.nodeInsidePolygon(node, area.getNodes());
     }
 
+    private void processAreasLayer()
+    {
+        Logging.info("Generating transition relations in Areas layer...");
+        for (Transition t : getAreaTransitions(getClosedWays(AREAS_LAYER_NAME))) {
+            Relation relation = new Relation();
+            TagMap keys = new TagMap();
+            keys.put("layer", AREAS_LAYER_NAME);
+            keys.put("type", TRANSITION_RELATION_NAME);
+            relation.setKeys(keys);
+            relation.addMember(new RelationMember("areas", t.area1));
+            relation.addMember(new RelationMember("areas", t.area2));
+            for (Node n : t.nodes) {
+                relation.addMember(new RelationMember("node", n));
+            }
+            AddNewPrimitiveToDataset(relation);
+        }
+        Logging.info("Generated new transitions in areas layer.");
+    }
 
     private void processSubAreasLayer()
     {
