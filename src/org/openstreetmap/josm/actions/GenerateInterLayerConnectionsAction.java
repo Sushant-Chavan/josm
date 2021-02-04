@@ -88,7 +88,7 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         }
 
         public Node getFirstNode() {
-            if (nodes != null) {
+            if (nodes != null && nodes.size() > 0) {
                 return nodes.get(0);
             }
             else {
@@ -313,10 +313,25 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         return sharedNodes.size() > 1;
     }
 
+    private List<Way> getParentWaysInLayer(Node n, String layer) {
+        List<Way> parents = n.getParentWays();
+        List<Way> deleteList = new ArrayList<Way>();
+        for (Way p: parents) {
+            TagMap keys = p.getKeys();
+            if (!keys.isEmpty() && keys.containsKey("layer") && keys.get("layer").equals(layer)) {
+                continue;
+            }
+            deleteList.add(p);
+        }
+        parents.removeAll(deleteList);
+        return parents;
+    }
+
     private Transition getNewTransition(Way area, int nodeStartIdx) {
         List<Node> nodes = area.getNodes(); 
         Node firstNode = nodes.get(nodeStartIdx);
-        if (firstNode.getParentWays().size() < 2) {
+        List<Way> parents = getParentWaysInLayer(firstNode, AREAS_LAYER_NAME);
+        if (parents.size() < 2) {
             // This node is not shared with other areas. So a transition does not exist
             return null;
         }
@@ -329,8 +344,8 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
         while(i < nodes.size() - 1) {
             Node nextNode = nodes.get(i);
             i += 1; // Update the iterator
-            List<Way> sharedParents = firstNode.getParentWays();
-            sharedParents.retainAll(nextNode.getParentWays());
+            List<Way> sharedParents = getParentWaysInLayer(nextNode, AREAS_LAYER_NAME);
+            sharedParents.retainAll(parents);
             if (sharedParents.size() == 2) {
                 if (t.area2 == null) {
                     Way adjacentArea = (sharedParents.get(0).getUniqueId() != area.getUniqueId()) ? sharedParents.get(0) : sharedParents.get(1);
@@ -345,8 +360,8 @@ public final class GenerateInterLayerConnectionsAction extends JosmAction {
 
         if (i == nodes.size() - 1) {
             Node nextNode = nodes.get(0);
-            List<Way> sharedParents = firstNode.getParentWays();
-            sharedParents.retainAll(nextNode.getParentWays());
+            List<Way> sharedParents = getParentWaysInLayer(firstNode, AREAS_LAYER_NAME);
+            sharedParents.retainAll(getParentWaysInLayer(nextNode, AREAS_LAYER_NAME));
             if (sharedParents.size() == 2) {
                 if (t.area2 == null) {
                     Way adjacentArea = (sharedParents.get(0).getUniqueId() != area.getUniqueId()) ? sharedParents.get(0) : sharedParents.get(1);
